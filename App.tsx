@@ -14,7 +14,15 @@ const App: React.FC = () => {
   const [manualKey, setManualKey] = useState<string>('');
 
   useEffect(() => {
-    // Controllo se esiste già una chiave nel sistema (aistudio bridge)
+    // 1. Controlla se c'è una chiave salvata localmente nel browser
+    const savedKey = localStorage.getItem('GEMINI_API_KEY');
+    if (savedKey) {
+      (process.env as any).API_KEY = savedKey;
+      setHasKey(true);
+      return;
+    }
+
+    // 2. Controllo se esiste già una chiave nel sistema (aistudio bridge)
     const checkKey = async () => {
       if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
         const selected = await window.aistudio.hasSelectedApiKey();
@@ -25,12 +33,16 @@ const App: React.FC = () => {
   }, []);
 
   const handleManualKeySubmit = () => {
-    if (manualKey.trim().length < 20) {
+    const trimmedKey = manualKey.trim();
+    if (trimmedKey.length < 20) {
       setError("La chiave inserita sembra troppo corta.");
       return;
     }
-    // Iniettiamo la chiave nell'ambiente virtuale per GeminiService
-    (process.env as any).API_KEY = manualKey.trim();
+    
+    // Salvataggio globale e locale
+    (process.env as any).API_KEY = trimmedKey;
+    localStorage.setItem('GEMINI_API_KEY', trimmedKey);
+    
     setHasKey(true);
     setError(null);
   };
@@ -40,6 +52,13 @@ const App: React.FC = () => {
       await window.aistudio.openSelectKey();
       setHasKey(true);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('GEMINI_API_KEY');
+    delete (process.env as any).API_KEY;
+    setHasKey(false);
+    setManualKey('');
   };
 
   const handleTranscript = useCallback(async (transcript: string) => {
@@ -76,24 +95,24 @@ const App: React.FC = () => {
   if (!hasKey) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-100">
-          <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 rotate-3">
+        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-100 animate-fade-in-up">
+          <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 rotate-3 shadow-lg">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Configura Gemini</h2>
-          <p className="text-slate-500 text-center mb-8 text-sm px-4">Incolla la tua chiave API qui sotto per attivare l'intelligenza artificiale.</p>
+          <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Attivazione Gemini</h2>
+          <p className="text-slate-500 text-center mb-8 text-sm px-4">Configura la tua API Key per iniziare a usare il registratore intelligente.</p>
           
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 ml-1">Incolla Chiave API</label>
               <input 
-                type="text"
+                type="password"
                 value={manualKey}
                 onChange={(e) => setManualKey(e.target.value)}
                 placeholder="AIzaSy..."
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-indigo-500 focus:outline-none transition-all font-mono text-sm"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-indigo-500 focus:outline-none transition-all font-mono text-sm shadow-inner"
               />
             </div>
             
@@ -117,11 +136,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          {error && <p className="mt-4 text-center text-red-500 text-xs font-medium">{error}</p>}
-
-          <p className="mt-8 text-[10px] text-slate-400 text-center leading-relaxed italic">
-            Nota: Assicurati che la chiave sia abilitata per il modello "gemini-3-flash-preview".
-          </p>
+          {error && <p className="mt-4 text-center text-red-500 text-xs font-medium bg-red-50 p-2 rounded-lg">{error}</p>}
         </div>
       </div>
     );
@@ -129,6 +144,18 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 flex flex-col items-center">
+      <div className="absolute top-4 right-4">
+        <button 
+          onClick={handleLogout}
+          className="text-xs font-medium text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Scollega Chiave
+        </button>
+      </div>
+
       <header className="mb-12 text-center">
         <div className="inline-block p-4 bg-indigo-600 rounded-2xl mb-4 shadow-xl shadow-indigo-100">
            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,14 +180,17 @@ const App: React.FC = () => {
             <div className="flex">
               <div className="ml-3">
                 <p className="text-sm font-medium">Errore: {error}</p>
-                <button onClick={reset} className="mt-2 text-xs font-bold uppercase text-red-600 hover:text-red-800">Riprova</button>
+                <div className="mt-2 flex gap-4">
+                  <button onClick={reset} className="text-xs font-bold uppercase text-red-600 hover:text-red-800 underline decoration-dotted">Riprova</button>
+                  <button onClick={handleLogout} className="text-xs font-bold uppercase text-indigo-600 hover:text-indigo-800 underline decoration-dotted">Cambia Chiave</button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
         {status === AppStatus.SUCCESS && report && (
-          <div className="w-full">
+          <div className="w-full animate-fade-in-up">
             <ReportSummary report={report} />
             <button
               onClick={reset}
@@ -187,7 +217,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="mt-auto py-8 text-slate-400 text-xs text-center">
-        &copy; {new Date().getFullYear()} Vocal Report AI
+        &copy; {new Date().getFullYear()} Vocal Report AI &bull; Smart Transcription
       </footer>
 
       <style dangerouslySetInnerHTML={{ __html: `

@@ -6,14 +6,14 @@ import { ProblemReport } from "./types";
  * Estrae i dati strutturati da una trascrizione vocale usando Gemini AI.
  */
 export const extractReportData = async (transcription: string): Promise<ProblemReport> => {
-  // Recupero la chiave API disponibile
-  const apiKey = process.env.API_KEY;
+  // Recupero la chiave API disponibile con fallback
+  const apiKey = process.env.API_KEY || (process as any).env.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Chiave API non configurata. Seleziona una chiave tramite il pulsante apposito.");
+    throw new Error("Chiave API non configurata correttamente nel sistema.");
   }
 
-  // Creazione istanza al momento della chiamata (fondamentale per Live/Nano Banana models)
+  // Creazione istanza al momento della chiamata
   const ai = new GoogleGenAI({ apiKey });
 
   try {
@@ -51,11 +51,15 @@ export const extractReportData = async (transcription: string): Promise<ProblemR
   } catch (error: any) {
     console.error("Gemini Extraction Error:", error);
     
-    // Gestione specifica errore chiave non trovata o non valida
-    if (error.message?.includes("Requested entity was not found") || error.status === 404) {
-      throw new Error("La chiave API selezionata non è valida o appartiene a un progetto non abilitato. Per favore seleziona una chiave valida.");
+    // Gestione specifica per errore chiave non valida o problemi di billing
+    if (error.message?.includes("API_KEY_INVALID") || error.status === 400) {
+       throw new Error("La chiave API inserita non è valida. Controlla di averla copiata correttamente.");
     }
     
-    throw new Error(`Errore AI: ${error.message || 'Impossibile processare la richiesta'}`);
+    if (error.message?.includes("Requested entity was not found") || error.status === 404) {
+      throw new Error("Modello non trovato o chiave non autorizzata per questo modello.");
+    }
+    
+    throw new Error(`Errore durante l'analisi IA: ${error.message || 'Controlla la tua connessione e la validità della chiave'}`);
   }
 };
