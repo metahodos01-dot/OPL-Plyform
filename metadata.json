@@ -1,0 +1,7 @@
+{
+  "name": "Vocal Problem Reporter",
+  "description": "A smart voice recorder that transcribes problem reports and extracts structured data (ODL, Description, Problem Type, Operator) to automatically populate a Google Sheet using Gemini AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
