@@ -2,17 +2,28 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ProblemReport } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Inizializzazione sicura: se la chiave manca, non crasha l'app immediatamente
+const getAIClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.error("ERRORE: API_KEY mancante nelle variabili d'ambiente.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const extractReportData = async (transcription: string): Promise<ProblemReport> => {
+  const ai = getAIClient();
+  if (!ai) throw new Error("API Key non configurata");
+
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: `Extract the following details from this problem report transcript: 
+    contents: `Estrai i seguenti dettagli dalla trascrizione di questo rapporto di problema:
     "${transcription}"
     
-    If the date is not specified, use today's date: ${new Date().toLocaleDateString('it-IT')}.
-    Ensure 'odl' is extracted as a string.
-    Categorize 'problemType' into a short category (e.g., Meccanico, Elettrico, Software, Logistico).`,
+    Se la data non è specificata, usa la data di oggi: ${new Date().toLocaleDateString('it-IT')}.
+    Assicurati che 'odl' sia estratto come stringa.
+    Categorizza 'problemType' in una breve categoria (es. Meccanico, Elettrico, Software, Logistico).`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -29,5 +40,6 @@ export const extractReportData = async (transcription: string): Promise<ProblemR
     }
   });
 
+  if (!response.text) throw new Error("Risposta vuota da Gemini");
   return JSON.parse(response.text.trim()) as ProblemReport;
 };

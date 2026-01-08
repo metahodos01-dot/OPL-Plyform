@@ -11,63 +11,59 @@ interface VoiceRecorderProps {
 export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptComplete, status, setStatus }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [lastTranscript, setLastTranscript] = useState('');
+  const [isSupported, setIsSupported] = useState(true);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true; // Abilitiamo interim per feedback immediato
-      recognition.lang = 'it-IT';
-
-      recognition.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-        
-        const fullTranscript = Array.from(event.results)
-          .map((result: any) => result[0])
-          .map((result: any) => result.transcript)
-          .join('');
-        
-        setLastTranscript(fullTranscript);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
-        if (event.error === 'no-speech') {
-          // Ignoriamo no-speech se stiamo ancora registrando, succede spesso in pause brevi
-          return;
-        }
-        setIsRecording(false);
-        setStatus(AppStatus.ERROR);
-      };
-
-      recognition.onend = () => {
-        // Se la registrazione finisce ma eravamo in stato isRecording, riavviala o processa
-        if (isRecording) {
-          recognition.start();
-        }
-      };
-
-      recognitionRef.current = recognition;
+    if (!SpeechRecognition) {
+      setIsSupported(false);
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'it-IT';
+
+    recognition.onresult = (event: any) => {
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      setLastTranscript(fullTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('Speech recognition error:', event.error);
+      if (event.error === 'no-speech') return;
+      setIsRecording(false);
+      setStatus(AppStatus.ERROR);
+    };
+
+    recognition.onend = () => {
+      if (isRecording) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error("Re-start error:", e);
+        }
+      }
+    };
+
+    recognitionRef.current = recognition;
   }, [isRecording, setStatus]);
 
   const toggleRecording = () => {
+    if (!isSupported) {
+      alert("Il tuo browser non supporta il riconoscimento vocale. Usa Chrome o Safari aggiornati.");
+      return;
+    }
+
     if (isRecording) {
-      recognitionRef.current?.stop();
       setIsRecording(false);
+      recognitionRef.current?.stop();
       
-      // Se abbiamo del testo, procediamo con l'invio
       if (lastTranscript.trim()) {
         setStatus(AppStatus.PROCESSING);
         onTranscriptComplete(lastTranscript);
@@ -81,13 +77,23 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptComple
       try {
         recognitionRef.current?.start();
       } catch (e) {
-        console.error("Errore avvio riconoscimento:", e);
+        console.error("Start error:", e);
+        setIsRecording(false);
+        setStatus(AppStatus.IDLE);
       }
     }
   };
 
+  if (!isSupported) {
+    return (
+      <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 text-center">
+        Il tuo browser non supporta il riconoscimento vocale.
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-white rounded-3xl shadow-xl border border-gray-100 transition-all hover:shadow-2xl w-full">
+    <div className="flex flex-col items-center justify-center p-8 bg-white rounded-3xl shadow-xl border border-gray-100 transition-all w-full">
       <div className="relative mb-8">
         {isRecording && (
           <div className="absolute inset-0 animate-ping rounded-full bg-red-400 opacity-20"></div>
@@ -98,7 +104,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptComple
           className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
             isRecording 
               ? 'bg-red-500 hover:bg-red-600 scale-110 shadow-red-200 shadow-2xl' 
-              : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg'
+              : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200'
           } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isRecording ? (
@@ -126,8 +132,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptComple
 
         <p className="text-gray-500 text-sm max-w-xs mx-auto">
           {isRecording 
-            ? 'Parla della segnalazione. Premi il quadrato per finire.' 
-            : 'Premi il microfono e descrivi il problema.'}
+            ? 'Tocca di nuovo per terminare' 
+            : 'Tocca il microfono per parlare'}
         </p>
       </div>
 
