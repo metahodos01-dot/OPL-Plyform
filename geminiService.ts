@@ -6,35 +6,28 @@ import { ProblemReport } from "./types";
  * Estrae i dati strutturati da una trascrizione vocale usando Gemini AI.
  */
 export const extractReportData = async (transcription: string): Promise<ProblemReport> => {
-  // Recupero sicuro dell'API KEY solo a runtime
-  let apiKey: string | undefined;
-  
-  try {
-    // Tentativo di accesso via process.env (Vercel/Node) o window.process
-    apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : (window as any).process?.env?.API_KEY;
-  } catch (e) {
-    console.error("Errore critico nell'accesso alle variabili d'ambiente:", e);
-  }
+  // Recupero la chiave API disponibile
+  const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    throw new Error("API_KEY mancante. Verifica le impostazioni del progetto.");
+    throw new Error("Chiave API non configurata. Seleziona una chiave tramite il pulsante apposito.");
   }
 
-  // Inizializzazione istanza locale per ogni richiesta
-  const genAI = new GoogleGenAI({ apiKey });
+  // Creazione istanza al momento della chiamata (fondamentale per Live/Nano Banana models)
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
-    const response = await genAI.models.generateContent({
+    const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Analizza questa segnalazione vocale ed estrai i dati nel formato JSON richiesto.
       Trascrizione: "${transcription}"
       
       Regole di estrazione:
-      - Data registrazione (usa: ${new Date().toLocaleDateString('it-IT')})
-      - numero ODL (se non presente scrivi "N/D")
-      - Descrizione (riassunto del problema)
-      - tipo di problema (es: Meccanico, Elettrico, Software, ecc.)
-      - operatore coinvolto (nome della persona)`,
+      - Data registrazione: usa ${new Date().toLocaleDateString('it-IT')}
+      - numero ODL: estrai il codice alfanumerico (es. ODL1234). Se non presente metti "N/D".
+      - Descrizione: un riassunto chiaro del problema.
+      - tipo di problema: categoria sintetica (Meccanico, Elettrico, Software, Sicurezza, ecc.).
+      - operatore coinvolto: nome della persona che parla o citata come responsabile.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -52,11 +45,17 @@ export const extractReportData = async (transcription: string): Promise<ProblemR
     });
 
     const resultText = response.text;
-    if (!resultText) throw new Error("L'IA non ha restituito dati validi.");
+    if (!resultText) throw new Error("L'IA non ha restituito una risposta valida.");
     
     return JSON.parse(resultText.trim()) as ProblemReport;
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    throw new Error(`Errore durante l'analisi: ${error.message || 'Controlla la tua connessione o API Key'}`);
+    console.error("Gemini Extraction Error:", error);
+    
+    // Gestione specifica errore chiave non trovata o non valida
+    if (error.message?.includes("Requested entity was not found") || error.status === 404) {
+      throw new Error("La chiave API selezionata non è valida o appartiene a un progetto non abilitato. Per favore seleziona una chiave valida.");
+    }
+    
+    throw new Error(`Errore AI: ${error.message || 'Impossibile processare la richiesta'}`);
   }
 };

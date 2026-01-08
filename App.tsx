@@ -10,11 +10,24 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [report, setReport] = useState<ProblemReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState<boolean>(true); // Assumiamo true all'inizio
 
-  // Debug per verificare se l'ambiente è caricato
   useEffect(() => {
-    console.log("App inizializzata. Stato:", status);
+    const checkKey = async () => {
+      if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+      }
+    };
+    checkKey();
   }, []);
+
+  const handleSelectKey = async () => {
+    if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+      await window.aistudio.openSelectKey();
+      setHasKey(true); // Procediamo assumendo che l'abbia selezionata come da linee guida
+    }
+  };
 
   const handleTranscript = useCallback(async (transcript: string) => {
     const cleanTranscript = transcript.trim();
@@ -36,6 +49,10 @@ const App: React.FC = () => {
       setStatus(AppStatus.SUCCESS);
     } catch (err: any) {
       console.error("Error in handleTranscript:", err);
+      // Se l'errore indica chiave non trovata, resettiamo lo stato della chiave
+      if (err.message?.includes("Requested entity was not found")) {
+        setHasKey(false);
+      }
       setError(err.message || "Errore durante l'elaborazione.");
       setStatus(AppStatus.ERROR);
     }
@@ -46,6 +63,31 @@ const App: React.FC = () => {
     setReport(null);
     setError(null);
   };
+
+  if (!hasKey) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-indigo-50 p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center">
+          <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Configura API Key</h2>
+          <p className="text-gray-500 mb-6">Per utilizzare l'estrazione dati intelligente, devi selezionare una chiave API valida dal tuo account Google AI Studio.</p>
+          <button 
+            onClick={handleSelectKey}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95"
+          >
+            Seleziona Chiave API
+          </button>
+          <p className="mt-4 text-xs text-gray-400 leading-relaxed">
+            Assicurati che la chiave provenga da un progetto con <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline">fatturazione attiva</a>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50 py-12 px-4 sm:px-6 lg:px-8 flex flex-col items-center">
@@ -78,7 +120,10 @@ const App: React.FC = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium">{error}</p>
-                <button onClick={reset} className="mt-2 text-xs font-bold uppercase tracking-widest text-red-600 hover:text-red-800">Riprova</button>
+                <div className="mt-2 flex gap-3">
+                  <button onClick={reset} className="text-xs font-bold uppercase tracking-widest text-red-600 hover:text-red-800">Riprova</button>
+                  <button onClick={handleSelectKey} className="text-xs font-bold uppercase tracking-widest text-indigo-600 hover:text-indigo-800">Cambia API Key</button>
+                </div>
               </div>
             </div>
           </div>
