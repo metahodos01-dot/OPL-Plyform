@@ -6,14 +6,20 @@ import { ProblemReport } from "./types";
  * Estrae i dati strutturati da una trascrizione vocale usando Gemini AI.
  */
 export const extractReportData = async (transcription: string): Promise<ProblemReport> => {
-  // Recupero la chiave API disponibile con fallback
-  const apiKey = process.env.API_KEY || (process as any).env.API_KEY;
+  // Cerchiamo la chiave in ordine di priorità:
+  // 1. Variabile d'ambiente locale (process.env)
+  // 2. localStorage (dove App.tsx la salva manualmente)
+  // 3. Fallback su window per ambienti particolari
+  const apiKey = 
+    (process.env as any).API_KEY || 
+    localStorage.getItem('GEMINI_API_KEY') || 
+    (window as any).process?.env?.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Chiave API non configurata correttamente nel sistema.");
+    throw new Error("Chiave API non trovata. Inseriscila nuovamente cliccando su 'Cambia Chiave'.");
   }
 
-  // Creazione istanza al momento della chiamata
+  // Inizializziamo il client Gemini con la chiave trovata
   const ai = new GoogleGenAI({ apiKey });
 
   try {
@@ -23,11 +29,11 @@ export const extractReportData = async (transcription: string): Promise<ProblemR
       Trascrizione: "${transcription}"
       
       Regole di estrazione:
-      - Data registrazione: usa ${new Date().toLocaleDateString('it-IT')}
-      - numero ODL: estrai il codice alfanumerico (es. ODL1234). Se non presente metti "N/D".
-      - Descrizione: un riassunto chiaro del problema.
-      - tipo di problema: categoria sintetica (Meccanico, Elettrico, Software, Sicurezza, ecc.).
-      - operatore coinvolto: nome della persona che parla o citata come responsabile.`,
+      - Data registrazione: usa la data di oggi (${new Date().toLocaleDateString('it-IT')}).
+      - numero ODL: estrai codici tipo ODL-123 o simili. Se non presente, scrivi "N/D".
+      - Descrizione: sintesi chiara del problema segnalato.
+      - tipo di problema: una parola (es. Meccanico, Elettrico, Software, Logistica).
+      - operatore coinvolto: nome dell'operatore che segnala o coinvolto.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -45,21 +51,22 @@ export const extractReportData = async (transcription: string): Promise<ProblemR
     });
 
     const resultText = response.text;
-    if (!resultText) throw new Error("L'IA non ha restituito una risposta valida.");
+    if (!resultText) throw new Error("L'IA ha risposto ma il testo è vuoto.");
     
     return JSON.parse(resultText.trim()) as ProblemReport;
   } catch (error: any) {
-    console.error("Gemini Extraction Error:", error);
-    
-    // Gestione specifica per errore chiave non valida o problemi di billing
-    if (error.message?.includes("API_KEY_INVALID") || error.status === 400) {
-       throw new Error("La chiave API inserita non è valida. Controlla di averla copiata correttamente.");
+    console.error("Gemini Error:", error);
+
+    // Se l'errore indica che la chiave non è valida
+    if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("invalid API key")) {
+       localStorage.removeItem('GEMINI_API_KEY'); // Puliamo la chiave errata
+       throw new Error("La chiave API non è valida o è scaduta. Inseriscine una nuova.");
+    }
+
+    if (error.message?.includes("billing") || error.message?.includes("quota")) {
+      throw new Error("La chiave funziona ma il piano gratuito è esaurito o il billing non è attivo su Google Cloud.");
     }
     
-    if (error.message?.includes("Requested entity was not found") || error.status === 404) {
-      throw new Error("Modello non trovato o chiave non autorizzata per questo modello.");
-    }
-    
-    throw new Error(`Errore durante l'analisi IA: ${error.message || 'Controlla la tua connessione e la validità della chiave'}`);
+    throw new Error(`Errore IA: ${error.message || 'Verifica la tua connessione o la validità della chiave'}`);
   }
 };
